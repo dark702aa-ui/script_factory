@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(220 15% 5%);
+  --color-foreground: hsl(40 20% 92%);
+  --color-surface: hsl(220 12% 9%);
+  --color-surface-2: hsl(222 10% 14%);
+  --color-border: hsl(220 10% 19%);
+  --color-muted-foreground: hsl(220 8% 58%);
+  --color-accent: hsl(16 100% 62%);
+  --color-accent-foreground: hsl(220 15% 6%);
+  --color-code: hsl(158 64% 52%);
+  --color-destructive: hsl(0 72% 60%);
+
+  --font-display: var(--display-font), "Rajdhani", sans-serif;
+  --font-sans: var(--body-font), "Inter", ui-sans-serif, sans-serif;
+  --font-mono: var(--mono-font), "JetBrains Mono", ui-monospace, monospace;
+}
+
+body {
+  background-color: var(--color-background);
+  background-image: radial-gradient(
+    circle at 20% 0%,
+    var(--color-surface) 0%,
+    var(--color-background) 45%
+  );
+  color: var(--color-foreground);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}

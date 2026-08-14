@@ -1,15 +1,7 @@
-type Tone = "keyword" | "string" | "comment" | "default";
-
 type EditorFile = {
   name: string;
-  lines: { text: string; tone?: Tone }[];
-};
-
-const toneClass: Record<Tone, string> = {
-  keyword: "text-code",
-  string: "text-accent",
-  comment: "text-muted-foreground",
-  default: "text-foreground/90",
+  content: string;
+  language?: string;
 };
 
 export function EditorWindow({
@@ -42,12 +34,8 @@ export function EditorWindow({
           ))}
         </div>
       </div>
-      <pre className="overflow-x-auto px-5 py-4 font-mono text-[13px] leading-relaxed">
-        {files[activeFile]?.lines.map((line, i) => (
-          <div key={i} className={toneClass[line.tone ?? "default"]}>
-            {line.text || "\u00A0"}
-          </div>
-        ))}
+      <pre className="overflow-x-auto px-5 py-4 font-mono text-[13px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
+        {files[activeFile]?.content || ""}
       </pre>
     </div>
   );

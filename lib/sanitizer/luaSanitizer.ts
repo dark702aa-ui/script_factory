@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { parse } from "luaparse";
 
 export type Severity = "critical" | "warning";

@@ -7,12 +7,14 @@ export function Badge({
 }: {
   children: React.ReactNode;
   className?: string;
-  variant?: "default" | "outline";
+  variant?: "default" | "outline" | "secondary";
 }) {
   const styles =
     variant === "outline"
       ? "border border-border bg-transparent text-muted-foreground"
-      : "border border-border bg-surface-2 text-foreground";
+      : variant === "secondary"
+      ? "border-transparent bg-surface-2 text-foreground"
+      : "border border-border bg-surface text-foreground";
 
   return (
     <span

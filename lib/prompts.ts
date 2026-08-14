@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const BASE_SYSTEM_PROMPT = `You are the Script Factory Code Engine, a specialized code-generation system for FiveM
 multiplayer server scripts. You generate Lua code exclusively for the ESX and QBCore
 frameworks. You do not generate code for any other purpose.
@@ -128,7 +129,7 @@ logic. If the script needs a database table, include install_sql.`;
 }
 
 export function buildRepairPrompt(params: {
-  previous: Record<string, string | undefined>;
+  previous: Record<string, any>;
   findings: { rule: string; message: string; file: string; line: number | null }[];
   framework: "esx" | "qbcore";
   language: "en" | "ar";

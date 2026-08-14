@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import { BASE_SYSTEM_PROMPT, buildGeneratePrompt, buildRepairPrompt } from "@/lib/prompts";
+import { BASE_SYSTEM_PROMPT } from "@/lib/prompts";
 import { sanitizeLuaScript, SanitizerFinding } from "@/lib/sanitizer/luaSanitizer";
+import { GoogleGenAI } from "@google/genai";
 
 export const runtime = "nodejs";
 
@@ -17,86 +19,14 @@ type GeneratedFiles = {
 const CODE_KEYS = ["client_lua", "server_lua"] as const;
 
 // تخطي فحص تسجيل الدخول للتطوير
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getSession(req: NextRequest): Promise<{ userId: string } | null> {
   return { userId: "demo-user" };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function checkAndConsumeQuota(userId: string): Promise<{ allowed: boolean }> {
   return { allowed: true };
-}
-
-async function callModel(systemPrompt: string, userPrompt: string): Promise<GeneratedFiles> {
-  const groqKey = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  // Verification: confirms in your `npm run dev` terminal, on every generation,
-  // which provider ran and how long the system prompt actually was — so you can
-  // see it's the full ~4,500-char BASE_SYSTEM_PROMPT, not an empty/short string.
-  console.log(
-    `[generate] provider=${groqKey ? "groq" : geminiKey ? "gemini" : "none"} systemPromptChars=${systemPrompt.length} userPromptChars=${userPrompt.length}`
-  );
-
-  // 1. التوليد عبر Groq API إذا كان مفتاحه متوفر
-  if (groqKey) {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${groqKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        // Without an explicit cap, multi-feature scripts (e.g. "a full laptop
-        // with contacts, messages, settings") can get truncated mid-JSON.
-        max_tokens: 8000,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`Groq API Error: ${err?.error?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    const text = data?.choices?.[0]?.message?.content;
-    return JSON.parse(text) as GeneratedFiles;
-  }
-
-  // 2. التوليد عبر Gemini API إذا كان المفتاح صحيحاً ويبدأ بـ AIzaSy
-  if (geminiKey) {
-    if (!geminiKey.startsWith("AIzaSy")) {
-      throw new Error("مفتاح Gemini غير صحيح. مفاتيح Google AI Studio يجب أن تبدأ بـ AIzaSy");
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8000 },
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`Gemini API Error: ${err?.error?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const cleanedText = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-    return JSON.parse(cleanedText) as GeneratedFiles;
-  }
-
-  throw new Error("لم يتم العثور على مفتاح API في .env.local (يرجى إضافة GROQ_API_KEY أو GEMINI_API_KEY)");
 }
 
 function sanitizeResult(result: GeneratedFiles): { findings: SanitizerFinding[]; blocked: boolean } {
@@ -121,11 +51,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const { prompt, framework, language, customInstructions } = body ?? {};
+  const { messages, framework, language, customInstructions } = body ?? {};
 
   if (
-    typeof prompt !== "string" ||
-    !prompt.trim() ||
+    !Array.isArray(messages) ||
+    messages.length === 0 ||
     !["esx", "qbcore"].includes(framework) ||
     !["en", "ar"].includes(language)
   ) {
@@ -137,17 +67,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Generation quota exceeded for your plan." }, { status: 429 });
   }
 
+  // Build a complete system prompt including framework conventions and custom instructions
+  const fullSystemPrompt = `${BASE_SYSTEM_PROMPT}\n\nFRAMEWORK: ${framework}\nFRAMEWORK CONVENTIONS:\n${
+    framework === "esx"
+      ? "- ESX: use ESX.GetPlayerFromId, TriggerEvent('esx:...'), exports for shared functions, ESX.RegisterUsableItem for items, esx_society for shared accounts."
+      : "- QBCore: use QBCore.Functions.GetPlayer, TriggerEvent('QBCore:...'), QBCore.Functions.CreateCallback for client↔server request/response, exports['qb-inventory'] for item handling."
+  }\n${
+    customInstructions?.trim()
+      ? `PROJECT-SPECIFIC INSTRUCTIONS:\n${customInstructions.trim()}\n`
+      : ""
+  }\nIf the request is in scope, generate the minimum set of files needed to fulfill it. Include a config.lua with any tunable values (prices, cooldowns, locations) rather than hardcoding them in client/server logic. If the script needs a database table, include install_sql.`;
+
+  // Map messages to Gemini format
+  const contents = messages.map((m: any) => ({
+    role: m.role === "user" ? "user" : "model",
+    parts: [{ text: m.content }],
+  }));
+
   let result: GeneratedFiles;
   try {
-    result = await callModel(
-      BASE_SYSTEM_PROMPT,
-      buildGeneratePrompt({
-        prompt,
-        framework,
-        language,
-        customInstructions: typeof customInstructions === "string" ? customInstructions : undefined,
-      })
-    );
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      throw new Error("لم يتم العثور على مفتاح API في .env.local (يرجى إضافة GEMINI_API_KEY)");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: contents,
+      config: {
+        systemInstruction: fullSystemPrompt,
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      }
+    });
+
+    const text = response.text;
+    if (!text) {
+      throw new Error("لم يتم إرجاع أي نص من النموذج.");
+    }
+    
+    result = JSON.parse(text) as GeneratedFiles;
   } catch (err: any) {
     console.error("=================== GENERATION ERROR ===================");
     console.error(err);
@@ -158,9 +119,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The model itself decides whether the request is in scope (see the SCOPE
-  // rule in lib/prompts.ts). When it isn't, there's no code to sanitize —
-  // just pass the polite refusal straight through to the client.
   if (result.supported === false) {
     return NextResponse.json({
       supported: false,
@@ -170,14 +128,34 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let { findings, blocked } = sanitizeResult(result);
+  const firstSanitize = sanitizeResult(result);
+  let findings = firstSanitize.findings;
+  const blocked = firstSanitize.blocked;
 
   if (blocked) {
     try {
-      result = await callModel(
-        BASE_SYSTEM_PROMPT,
-        buildRepairPrompt({ previous: result, findings, framework, language })
-      );
+      // Fix attempt
+      const repairContents = [...contents, {
+        role: "model",
+        parts: [{ text: JSON.stringify(result) }]
+      }, {
+        role: "user",
+        parts: [{ text: `Your previous output failed automated safety checks. Fix ONLY the issues listed below, preserving everything else about the script's structure and behavior. Return the full corrected JSON object in the same format as before.\n\nSAFETY FINDINGS TO FIX:\n${findings.map((f) => `- [${f.file}${f.line ? `:${f.line}` : ""}] ${f.rule}: ${f.message}`).join("\n")}` }]
+      }];
+
+      const geminiKey = process.env.GEMINI_API_KEY!;
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      
+      const repairResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: repairContents,
+        config: {
+          systemInstruction: fullSystemPrompt,
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        }
+      });
+      result = JSON.parse(repairResponse.text!) as GeneratedFiles;
     } catch (err) {
       console.error("Repair Error:", err);
       return NextResponse.json(

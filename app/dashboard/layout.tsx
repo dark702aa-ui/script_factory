@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FilePlus2, History, Sparkles, Terminal } from "lucide-react";
+import { FilePlus2, History, Sparkles, Terminal, Wand2 } from "lucide-react";
 
 const NAV = [
-  { href: "/dashboard", label: "New script", icon: FilePlus2 },
+  { href: "/dashboard", label: "Script Maker (Chat)", icon: FilePlus2 },
+  { href: "/dashboard/prompt-generator", label: "Prompt Generator", icon: Wand2 },
   { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/skills", label: "Skills & Instructions", icon: Sparkles },
 ];

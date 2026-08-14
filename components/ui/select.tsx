@@ -45,6 +45,7 @@ export function Select({
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLabel(findLabel(children, value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);

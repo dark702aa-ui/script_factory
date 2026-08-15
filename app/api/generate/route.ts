@@ -216,5 +216,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...result, supported: true, sanitizerFindings: findings });
+  return NextResponse.json({
+    ...result,
+    supported: true,
+    sanitizerFindings: findings,
+    _meta: { provider: "groq", model: "llama-3.3-70b-versatile" },
+  });
 }

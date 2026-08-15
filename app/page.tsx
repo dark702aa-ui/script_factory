@@ -31,7 +31,7 @@ export default function LandingPage() {
           <div className="flex flex-col items-center text-center space-y-8 max-w-3xl mx-auto">
             <Badge variant="secondary" className="px-3 py-1 rounded-full bg-accent/10 text-accent border-accent/20 flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium tracking-wide uppercase">Introducing Gemini 2.5 Flash</span>
+              <span className="text-xs font-medium tracking-wide uppercase">Powered by Llama 3.3 70B on Groq</span>
             </Badge>
             
             <h1 className="text-5xl md:text-7xl font-semibold tracking-tight text-foreground">
@@ -85,7 +85,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-semibold">Semantic Generation</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Powered by Gemini models trained heavily on Lua 5.4 and FiveM natives. It understands game logic, not just syntax.
+                Powered by Llama 3.3 70B, running on Groq's inference infrastructure for fast responses. Trained heavily on Lua 5.4 and FiveM natives — it understands game logic, not just syntax.
               </p>
             </div>
             <div className="space-y-4 p-6 rounded-2xl bg-background border border-border/50 transition-colors hover:border-accent/40">

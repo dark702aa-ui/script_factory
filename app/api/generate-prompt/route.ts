@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
         { role: "user", content: `Create a detailed script generator prompt for this idea: ${idea}` },
       ],
       temperature: 0.7,
+      max_tokens: 2000,
     });
 
     // استخراج نص الـ AI الحقيقي بدون أي إضافات أو نصوص محددة مسبقاً
@@ -44,7 +45,10 @@ export async function POST(req: NextRequest) {
       throw new Error("لم يتم إرجاع نص من الذكاء الاصطناعي");
     }
 
-    return NextResponse.json({ prompt: realAiPrompt });
+    return NextResponse.json({
+      prompt: realAiPrompt,
+      _meta: { provider: "groq", model: "llama-3.3-70b-versatile" },
+    });
   } catch (err: any) {
     console.error("PROMPT GENERATION ERROR:", err);
     return NextResponse.json({ error: err?.message || "Failed to generate prompt" }, { status: 500 });

@@ -10,8 +10,8 @@ export default function DashboardPage() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden p-4 md:p-6">
       <div className="mb-4">
-        <h1 className="font-display text-xl md:text-2xl font-bold text-white">Script Maker</h1>
-        <p className="text-xs md:text-sm text-gray-400 mt-0.5">
+        <h1 className="font-display text-xl md:text-2xl font-bold text-foreground">Script Maker</h1>
+        <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
           Describe the feature in plain language. Pick a framework and get production-ready FiveM code.
         </p>
       </div>

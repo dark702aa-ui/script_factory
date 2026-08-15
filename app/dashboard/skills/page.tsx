@@ -12,6 +12,29 @@ type Skill = {
   content: string;
 };
 
+const SKILL_TEMPLATES: Omit<Skill, "id">[] = [
+  {
+    name: "oxmysql only",
+    description: "Force oxmysql instead of mysql-async for all database calls.",
+    content: "Always use oxmysql (exports.oxmysql or the oxmysql library functions) for every database query. Never use mysql-async or MySQL.Async.",
+  },
+  {
+    name: "qb-target interactions",
+    description: "Prefer qb-target zones over qb-menu for player interactions.",
+    content: "Whenever a script needs the player to interact with an object, ped, or zone, use qb-target (exports['qb-target']:AddBoxZone / AddTargetEntity) instead of qb-menu or key-press prompts.",
+  },
+  {
+    name: "Arabic explanations",
+    description: "Keep the explanation field in Arabic even for English prompts.",
+    content: "Always write the \"explanation\" field in Arabic, regardless of what language the request was written in. Code, comments, and variable names stay in English as usual.",
+  },
+  {
+    name: "Strict resource naming",
+    description: "Namespace every export/event under one prefix.",
+    content: "Prefix every custom event name and export with 'sf_' (e.g. 'sf:startJob', exports.sf_core) to avoid collisions with other resources on the server.",
+  },
+];
+
 export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,6 +88,12 @@ export default function SkillsPage() {
     startEditing(newSkill);
   };
 
+  const handleAddTemplate = (template: Omit<Skill, "id">) => {
+    const newSkill: Skill = { id: crypto.randomUUID(), ...template };
+    saveSkills([newSkill, ...skills]);
+    startEditing(newSkill);
+  };
+
   const handleDelete = (id: string) => {
     saveSkills(skills.filter(s => s.id !== id));
     if (editingId === id) {
@@ -114,6 +143,24 @@ export default function SkillsPage() {
       <div className="flex-1 overflow-hidden grid lg:grid-cols-[300px_1fr] gap-0">
         {/* Sidebar */}
         <div className="overflow-y-auto border-r border-border bg-surface-2/30 p-4 space-y-3">
+          <div>
+            <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Quick templates
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SKILL_TEMPLATES.map((t) => (
+                <button
+                  key={t.name}
+                  onClick={() => handleAddTemplate(t)}
+                  title={t.description}
+                  className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground"
+                >
+                  + {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {skills.length === 0 ? (
             <div className="text-center p-6 border border-dashed border-border rounded-lg text-muted-foreground">
               <FileCode2 className="h-8 w-8 mx-auto mb-2 opacity-50" />

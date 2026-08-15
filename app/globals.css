@@ -37,20 +37,20 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f1015;
+  background: var(--color-background);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #222530;
+  background: var(--color-surface-2);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #e85527;
+  background: var(--color-accent);
 }
 
 /* لإخفاء السكرول الأبيض في Firefox و IE */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #222530 #0f1015;
+  scrollbar-color: var(--color-surface-2) var(--color-background);
 }

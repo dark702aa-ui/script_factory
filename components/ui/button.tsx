@@ -17,7 +17,7 @@ const variantStyle: Record<string, string> = {
   default: "bg-accent text-accent-foreground hover:opacity-90",
   outline: "border border-border text-foreground hover:bg-surface-2",
   ghost: "text-muted-foreground hover:text-foreground hover:bg-surface-2",
-  secondary: "bg-surface-2 text-foreground hover:bg-surface-3 border border-border/50",
+  secondary: "bg-surface-2 text-foreground hover:bg-surface border border-border/50",
   destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
 };
 

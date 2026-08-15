@@ -18,11 +18,12 @@ type GeneratedFiles = {
 
 const CODE_KEYS = ["client_lua", "server_lua"] as const;
 
-// إعداد المفاتيح المتعددة (تدعم GROQ_API_KEYS مفصولة بفواصل، أو التراجع إلى GROQ_API_KEY_SCRIPT)
+// إعداد المفاتيح المتعددة (تدعم GROQ_API_KEYS مفصولة بفواصل، أو GROQ_API_KEY_SCRIPT،
+// أو التراجع إلى GROQ_API_KEY العادي حتى يشتغل مهما كان اسم المتغير في .env.local)
 const apiKeys = (
-  process.env.GROQ_API_KEYS 
-    ? process.env.GROQ_API_KEYS.split(",").map(k => k.trim()) 
-    : [process.env.GROQ_API_KEY_SCRIPT]
+  process.env.GROQ_API_KEYS
+    ? process.env.GROQ_API_KEYS.split(",").map(k => k.trim())
+    : [process.env.GROQ_API_KEY_SCRIPT || process.env.GROQ_API_KEY]
 ).filter(Boolean) as string[];
 
 let currentKeyIndex = 0;
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
         messages: groqMessages,
         temperature: 0.2,
         response_format: { type: "json_object" },
+        max_tokens: 8000,
       });
     });
 
@@ -188,6 +190,7 @@ export async function POST(req: NextRequest) {
           messages: repairMessages,
           temperature: 0.2,
           response_format: { type: "json_object" },
+          max_tokens: 8000,
         });
       });
 

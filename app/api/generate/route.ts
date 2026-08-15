@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BASE_SYSTEM_PROMPT } from "@/lib/prompts";
 import { sanitizeLuaScript, SanitizerFinding } from "@/lib/sanitizer/luaSanitizer";
-import { GoogleGenAI } from "@google/genai";
+import { Groq } from "groq-sdk";
 
 export const runtime = "nodejs";
 
@@ -18,13 +18,57 @@ type GeneratedFiles = {
 
 const CODE_KEYS = ["client_lua", "server_lua"] as const;
 
-// تخطي فحص تسجيل الدخول للتطوير
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// إعداد المفاتيح المتعددة (تدعم GROQ_API_KEYS مفصولة بفواصل، أو التراجع إلى GROQ_API_KEY_SCRIPT)
+const apiKeys = (
+  process.env.GROQ_API_KEYS 
+    ? process.env.GROQ_API_KEYS.split(",").map(k => k.trim()) 
+    : [process.env.GROQ_API_KEY_SCRIPT]
+).filter(Boolean) as string[];
+
+let currentKeyIndex = 0;
+
+/**
+ * دالة مساعدة لتنفيذ طلبات Groq مع نظام التبديل التلقائي عند حدوث Rate Limit (429)
+ */
+async function executeWithGroqKeyRotation<T>(fn: (groq: Groq) => Promise<T>): Promise<T> {
+  if (apiKeys.length === 0) {
+    throw new Error("No Groq API keys are configured in .env.local (GROQ_API_KEYS or GROQ_API_KEY_SCRIPT)");
+  }
+
+  let attempts = 0;
+  const maxAttempts = apiKeys.length;
+
+  while (attempts < maxAttempts) {
+    const apiKey = apiKeys[currentKeyIndex];
+    // الانتقال للمفتاح التالي بالدور (Round-robin) للطلبات القادمة
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+
+    const groq = new Groq({ apiKey });
+
+    try {
+      return await fn(groq);
+    } catch (err: any) {
+      const status = err?.status || err?.statusCode;
+      const message = err?.message || "";
+      const isRateLimit = status === 429 || message.includes("rate_limit_exceeded") || message.includes("Rate limit");
+
+      // إذا كان الخطأ بسبب تجاوز الحد وهناك مفاتيح أخرى، جرب المفتاح التالي
+      if (isRateLimit && attempts < maxAttempts - 1) {
+        console.warn(`Groq API key rate limited, switching to next key... (Attempt ${attempts + 1}/${maxAttempts})`);
+        attempts++;
+        continue;
+      }
+      // لأي خطأ آخر أو نفاد المفاتيح، أوقف التكرار وأرجع الخطأ
+      throw err;
+    }
+  }
+  throw new Error("All Groq API keys have reached their rate limits.");
+}
+
 async function getSession(req: NextRequest): Promise<{ userId: string } | null> {
   return { userId: "demo-user" };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function checkAndConsumeQuota(userId: string): Promise<{ allowed: boolean }> {
   return { allowed: true };
 }
@@ -67,7 +111,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Generation quota exceeded for your plan." }, { status: 429 });
   }
 
-  // Build a complete system prompt including framework conventions and custom instructions
   const fullSystemPrompt = `${BASE_SYSTEM_PROMPT}\n\nFRAMEWORK: ${framework}\nFRAMEWORK CONVENTIONS:\n${
     framework === "esx"
       ? "- ESX: use ESX.GetPlayerFromId, TriggerEvent('esx:...'), exports for shared functions, ESX.RegisterUsableItem for items, esx_society for shared accounts."
@@ -76,43 +119,38 @@ export async function POST(req: NextRequest) {
     customInstructions?.trim()
       ? `PROJECT-SPECIFIC INSTRUCTIONS:\n${customInstructions.trim()}\n`
       : ""
-  }\nIf the request is in scope, generate the minimum set of files needed to fulfill it. Include a config.lua with any tunable values (prices, cooldowns, locations) rather than hardcoding them in client/server logic. If the script needs a database table, include install_sql.`;
+  }\nCAPABILITIES: You can either GENERATE new FiveM scripts from scratch OR ANALYZE, REVIEW, DEBUG, and EXPLAIN existing code/files provided by the user. If the user asks a question about a script, asks for a code review, or wants to know what a script does, analyze the provided code thoroughly and explain it in the "explanation" field (and optionally provide corrected code if fixing bugs). Set "supported": true for any valid FiveM related request (generation or code review/analysis). Only set "supported": false if the request is completely unrelated to FiveM or game development. Include a config.lua with any tunable values when generating new scripts. If the script needs a database table, include install_sql.`;
 
-  // Map messages to Gemini format
-  const contents = messages.map((m: any) => ({
-    role: m.role === "user" ? "user" : "model",
-    parts: [{ text: m.content }],
-  }));
+  const groqMessages = [
+    { role: "system", content: fullSystemPrompt },
+    ...messages.map((m: any) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.content,
+    })),
+  ];
 
   let result: GeneratedFiles;
   try {
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      throw new Error("لم يتم العثور على مفتاح API في .env.local (يرجى إضافة GEMINI_API_KEY)");
-    }
-
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: contents,
-      config: {
-        systemInstruction: fullSystemPrompt,
-        responseMimeType: "application/json",
+    // استدعاء Groq مع دعم التبديل التلقائي للمفاتيح
+    const completion = await executeWithGroqKeyRotation(async (groq) => {
+      return await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: groqMessages,
         temperature: 0.2,
-      }
+        response_format: { type: "json_object" },
+      });
     });
 
-    const text = response.text;
+    const text = completion.choices[0]?.message?.content;
     if (!text) {
-      throw new Error("لم يتم إرجاع أي نص من النموذج.");
+      throw new Error("No output returned from Groq model.");
     }
-    
+
     result = JSON.parse(text) as GeneratedFiles;
   } catch (err: any) {
-    console.error("=================== GENERATION ERROR ===================");
+    console.error("=================== SCRIPT GENERATION ERROR ===================");
     console.error(err);
-    console.error("=======================================================");
+    console.error("==============================================================");
     return NextResponse.json(
       { error: err?.message || "Generation failed." },
       { status: 502 }
@@ -124,7 +162,7 @@ export async function POST(req: NextRequest) {
       supported: false,
       explanation:
         result.explanation ||
-        "This tool only generates FiveM ESX/QBCore scripts — try describing a script instead.",
+        "This tool only works with FiveM ESX/QBCore scripts — try describing or providing script code instead.",
     });
   }
 
@@ -134,28 +172,26 @@ export async function POST(req: NextRequest) {
 
   if (blocked) {
     try {
-      // Fix attempt
-      const repairContents = [...contents, {
-        role: "model",
-        parts: [{ text: JSON.stringify(result) }]
-      }, {
-        role: "user",
-        parts: [{ text: `Your previous output failed automated safety checks. Fix ONLY the issues listed below, preserving everything else about the script's structure and behavior. Return the full corrected JSON object in the same format as before.\n\nSAFETY FINDINGS TO FIX:\n${findings.map((f) => `- [${f.file}${f.line ? `:${f.line}` : ""}] ${f.rule}: ${f.message}`).join("\n")}` }]
-      }];
-
-      const geminiKey = process.env.GEMINI_API_KEY!;
-      const ai = new GoogleGenAI({ apiKey: geminiKey });
-      
-      const repairResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: repairContents,
-        config: {
-          systemInstruction: fullSystemPrompt,
-          responseMimeType: "application/json",
-          temperature: 0.2,
+      const repairMessages = [
+        ...groqMessages,
+        { role: "assistant", content: JSON.stringify(result) },
+        {
+          role: "user",
+          content: `Your previous output failed automated safety checks. Fix ONLY the issues listed below, preserving everything else about the script's structure and behavior. Return the full corrected JSON object in the same format as before.\n\nSAFETY FINDINGS TO FIX:\n${findings.map((f) => `- [${f.file}${f.line ? `:${f.line}` : ""}] ${f.rule}: ${f.message}`).join("\n")}`
         }
+      ];
+
+      // استدعاء الإصلاح أيضاً مع نظام التبديل التلقائي للمفاتيح
+      const repairCompletion = await executeWithGroqKeyRotation(async (groq) => {
+        return await groq.chat.completions.create({
+          model: "llama-3.3-70b-versatile",
+          messages: repairMessages,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        });
       });
-      result = JSON.parse(repairResponse.text!) as GeneratedFiles;
+
+      result = JSON.parse(repairCompletion.choices[0]?.message?.content || "{}") as GeneratedFiles;
     } catch (err) {
       console.error("Repair Error:", err);
       return NextResponse.json(

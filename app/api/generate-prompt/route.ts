@@ -1,44 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { Groq } from "groq-sdk";
 
 export const runtime = "nodejs";
 
-const SYSTEM_PROMPT = `You are a Prompt Engineer for a FiveM Script Generator AI. 
-Your job is to take the user's rough idea for a FiveM script (ESX/QBCore) and turn it into a highly detailed, structured, and professional prompt that will produce the best possible code from the Script Generator.
+// هُنا نخبر الذكاء الاصطناعي بدوره للبدء في الكتابة بنفسه
+const SYSTEM_PROMPT = `You are an expert FiveM Prompt Engineer. 
+Your task is to take the user's raw script idea and generate a completely custom, highly detailed specification prompt for a FiveM AI script generator.
 
-Follow this structure for the enhanced prompt:
-1. **Script Overview**: A clear 1-2 sentence description.
-2. **Core Features**: A bulleted list of the exact mechanics.
-3. **Configuration Requirements**: What should go in config.lua (coords, prices, times).
-4. **UI/NUI (if applicable)**: Describe the frontend look and feel.
-5. **Database**: Mention if it needs SQL tables.
+Include:
+- Detailed feature breakdown
+- Config requirements
+- Database tables (if needed)
+- NUI / UI details (if applicable)
 
-Output ONLY the enhanced prompt text. Do not include introductory text like "Here is your prompt:".`;
+CRITICAL: Do NOT use rigid pre-made templates. Write a unique, optimized prompt built specifically around the user's idea. Output ONLY the prompt.`;
 
 export async function POST(req: NextRequest) {
   try {
     const { idea } = await req.json();
     if (!idea) return NextResponse.json({ error: "Idea is required" }, { status: 400 });
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) {
-      return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    const groqKey = process.env.GROQ_API_KEY_PROMPT || process.env.GROQ_API_KEY;
+    if (!groqKey) {
+      return NextResponse.json({ error: "مفتاح Groq غير موجود في .env.local" }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: idea,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.7,
-      }
+    const groq = new Groq({ apiKey: groqKey });
+
+    // الاتصال الفعلي بالذكاء الاصطناعي
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `Create a detailed script generator prompt for this idea: ${idea}` },
+      ],
+      temperature: 0.7,
     });
 
-    const prompt = response.text?.trim() || "";
-    return NextResponse.json({ prompt });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Failed to generate prompt" }, { status: 500 });
+    // استخراج نص الـ AI الحقيقي بدون أي إضافات أو نصوص محددة مسبقاً
+    const realAiPrompt = completion.choices[0]?.message?.content?.trim();
+
+    if (!realAiPrompt) {
+      throw new Error("لم يتم إرجاع نص من الذكاء الاصطناعي");
+    }
+
+    return NextResponse.json({ prompt: realAiPrompt });
+  } catch (err: any) {
+    console.error("PROMPT GENERATION ERROR:", err);
+    return NextResponse.json({ error: err?.message || "Failed to generate prompt" }, { status: 500 });
   }
 }

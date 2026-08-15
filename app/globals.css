@@ -30,3 +30,27 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
+/* تخصيص السكرول بار ليناسب الثيم الداكن */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f1015;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222530;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #e85527;
+}
+
+/* لإخفاء السكرول الأبيض في Firefox و IE */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #222530 #0f1015;
+}

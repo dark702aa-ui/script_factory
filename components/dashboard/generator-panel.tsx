@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, Loader2, Sparkles, Copy, Check, Paperclip, Send, Terminal } from "lucide-react";
+import { Download, Loader2, Sparkles, Copy, Check, Paperclip, Send, Terminal, FolderOpen, Save, FileCode, X } from "lucide-react";
 import JSZip from "jszip";
 
 type GeneratedFiles = {
@@ -41,18 +41,7 @@ export type Message = {
   result?: GeneratedFiles;
 };
 
-function pushToHistory(entry: { title: string; messages: Message[]; framework: string; language: string }) {
-  try {
-    const raw = localStorage.getItem("scriptHistory");
-    const list = raw ? JSON.parse(raw) : [];
-    list.unshift({ id: crypto.randomUUID(), timestamp: Date.now(), ...entry });
-    localStorage.setItem("scriptHistory", JSON.stringify(list.slice(0, 20)));
-  } catch {
-    // localStorage unavailable
-  }
-}
-
-export function GeneratorPanel() {
+export function GeneratorPanel({ chatId }: { chatId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [prompt, setPrompt] = useState("");
   const [framework, setFramework] = useState<"esx" | "qbcore">("esx");
@@ -61,89 +50,114 @@ export function GeneratorPanel() {
   const [result, setResult] = useState<GeneratedFiles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // نظام الملفات المرفقة تلقائياً أو يدوياً
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
+
+  // Local Workspace States (File System Access API)
+  const [dirHandle, setDirHandle] = useState<any>(null);
+  const [localFiles, setLocalFiles] = useState<{ name: string; handle: any }[]>([]);
+  const [savingFileKey, setSavingFileKey] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!chatId) return;
+
+    try {
+      const raw = localStorage.getItem("scriptHistory") || localStorage.getItem("script_factory_history");
+      if (raw) {
+        const list = JSON.parse(raw);
+        const currentChat = list.find((item: any) => item.id === chatId);
+        
+        if (currentChat) {
+          setMessages(currentChat.messages || []);
+          if (currentChat.framework) setFramework(currentChat.framework);
+          if (currentChat.language) setLanguage(currentChat.language);
+          
+          const lastModelMsgWithResult = currentChat.messages?.slice().reverse().find((m: Message) => m.result);
+          if (lastModelMsgWithResult?.result) {
+            setResult(lastModelMsgWithResult.result);
+          } else {
+            setResult(null);
+          }
+        } else {
+          setMessages([]);
+          setResult(null);
+        }
+      } else {
+        setMessages([]);
+        setResult(null);
+      }
+    } catch (e) {
+      console.error("Failed to load chat", e);
+      setMessages([]);
+      setResult(null);
+    }
+
     const draft = sessionStorage.getItem("draftPrompt");
     if (draft) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPrompt(draft);
       sessionStorage.removeItem("draftPrompt");
     }
-  }, []);
+  }, [chatId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleSend() {
-    if (!prompt.trim() || loading) return;
-    
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: prompt };
-    const newMessages = [...messages, userMsg];
-    
-    setMessages(newMessages);
-    setPrompt("");
-    setLoading(true);
-    setError(null);
-    
+  // فتح المجلد وقراءة جميع ملفات السكريبت الموجودة فيه تلقائياً وإرفاقها فوراً
+  async function handleOpenFolder() {
     try {
-      let customInstructions = "";
-      try {
-        const skillsRaw = localStorage.getItem("script-factory-skills");
-        if (skillsRaw) {
-          const skillsList = JSON.parse(skillsRaw);
-          if (Array.isArray(skillsList)) {
-            customInstructions = skillsList.map(s => `--- Skill: ${s.name} ---\n${s.description}\n${s.content}\n`).join("\n");
+      if (!window.showDirectoryPicker) {
+        alert("Your browser does not support the File System Access API. Please use Chrome or Edge.");
+        return;
+      }
+      // @ts-ignore
+      const handle = await window.showDirectoryPicker();
+      setDirHandle(handle);
+      
+      const files: { name: string; handle: any }[] = [];
+      const newAttached: { name: string; content: string }[] = [];
+
+      for await (const entry of handle.values()) {
+        if (entry.kind === 'file') {
+          files.push({ name: entry.name, handle: entry });
+          // قراءة الملفات البرمجية تلقائياً وإضافتها للمرفقات
+          if (entry.name.endsWith('.lua') || entry.name.endsWith('.sql') || entry.name.endsWith('.html') || entry.name.endsWith('.js')) {
+            try {
+              const file = await entry.getFile();
+              const text = await file.text();
+              newAttached.push({ name: entry.name, content: text });
+            } catch (err) {
+              console.error("Failed to read file:", entry.name);
+            }
           }
-        } else {
-          // Fallback to old format
-          customInstructions = localStorage.getItem("customInstructions") ?? "";
         }
-      } catch (e) {
-        console.error("Failed to parse skills", e);
       }
-      
-      const apiMessages = newMessages.map(m => ({
-        role: m.role,
-        content: m.role === "user" ? m.content : JSON.stringify(m.result)
-      }));
+      setLocalFiles(files);
+      if (newAttached.length > 0) {
+        setAttachedFiles(newAttached);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Folder picker failed", err);
+      }
+    }
+  }
 
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, framework, language, customInstructions }),
+  // قراءة ملف محلي فردي عند الضغط عليه من الشريط
+  async function handleReadLocalFile(fileHandle: any) {
+    try {
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      setAttachedFiles(prev => {
+        const filtered = prev.filter(f => f.name !== file.name);
+        return [...filtered, { name: file.name, content: text }];
       });
-      
-      if (!res.ok) throw new Error("Generation failed. Try rephrasing the request.");
-      
-      const data: GeneratedFiles = await res.json();
-      setResult(data);
-      
-      const modelMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "model",
-        content: data.explanation || "Script generated successfully.",
-        result: data,
-      };
-      
-      const updatedMessages = [...newMessages, modelMsg];
-      setMessages(updatedMessages);
-
-      if (data.supported !== false) {
-        pushToHistory({ 
-          title: newMessages[0].content.slice(0, 40) + (newMessages[0].content.length > 40 ? "..." : ""),
-          messages: updatedMessages, 
-          framework, 
-          language 
-        });
-      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setLoading(false);
+      console.error("Failed to read local file", err);
     }
   }
 
@@ -156,7 +170,10 @@ export function GeneratorPanel() {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         if (text) {
-          setPrompt(prev => prev + "\\n\\n--- File: " + file.name + " ---\\n```\\n" + text + "\\n```\\n");
+          setAttachedFiles(prev => {
+            const filtered = prev.filter(f => f.name !== file.name);
+            return [...filtered, { name: file.name, content: text }];
+          });
         }
       };
       reader.readAsText(file);
@@ -164,6 +181,164 @@ export function GeneratorPanel() {
     
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  function removeAttachedFile(fileName: string) {
+    setAttachedFiles(prev => prev.filter(f => f.name !== fileName));
+  }
+
+  async function handleSaveToLocalDisk(key: Exclude<keyof GeneratedFiles, "supported" | "explanation">) {
+    if (!result || !result[key]) return;
+    const fileName = FILE_LABELS[key];
+    const content = result[key]!;
+
+    if (!dirHandle) {
+      await handleOpenFolder();
+    }
+
+    if (!dirHandle) return;
+
+    try {
+      setSavingFileKey(key);
+      // @ts-ignore
+      const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+      // @ts-ignore
+      const writable = await fileHandle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      
+      if (!localFiles.some(f => f.name === fileName)) {
+        setLocalFiles(prev => [...prev, { name: fileName, handle: fileHandle }]);
+      }
+      
+      alert(`Successfully saved ${fileName} to your local folder!`);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Failed to write to local disk", err);
+        alert("Permission denied or failed to save file.");
+      }
+    } finally {
+      setSavingFileKey(null);
+    }
+  }
+
+  function saveChatToHistory(updatedMessages: Message[], currentFramework: string, currentLanguage: string) {
+    try {
+      const raw = localStorage.getItem("scriptHistory") || localStorage.getItem("script_factory_history");
+      let list = raw ? JSON.parse(raw) : [];
+      
+      const firstUserMsg = updatedMessages.find(m => m.role === "user")?.content || "Untitled Script";
+      const title = firstUserMsg.slice(0, 40) + (firstUserMsg.length > 40 ? "..." : "");
+
+      const existingIndex = list.findIndex((item: any) => item.id === chatId);
+      const chatEntry = {
+        id: chatId,
+        title,
+        scriptName: title,
+        messages: updatedMessages,
+        framework: currentFramework,
+        language: currentLanguage,
+        timestamp: Date.now(),
+      };
+
+      if (existingIndex >= 0) {
+        list[existingIndex] = chatEntry;
+      } else {
+        list.unshift(chatEntry);
+      }
+
+      localStorage.setItem("scriptHistory", JSON.stringify(list.slice(0, 20)));
+      localStorage.setItem("script_factory_history", JSON.stringify(list.slice(0, 20)));
+      window.dispatchEvent(new Event("storage"));
+    } catch {
+      // localStorage unavailable
+    }
+  }
+
+  async function handleSend() {
+    if ((!prompt.trim() && attachedFiles.length === 0) || loading) return;
+    
+    let promptToSend = prompt;
+    
+    // إرسال محتوى جميع الملفات المرفقة بالكامل مع الرسالة للذكاء الاصطناعي
+    if (attachedFiles.length > 0) {
+      promptToSend += "\n\n--- User Attached Script Files (Full Content) ---\n";
+      attachedFiles.forEach(f => {
+        promptToSend += `\nFile Name: ${f.name}\n\`\`\`lua\n${f.content}\n\`\`\`\n`;
+      });
+    } else if (result) {
+      const activeKeys = fileKeys;
+      if (activeKeys.length > 0) {
+        promptToSend += "\n\n--- Current Generated Files Context ---\n";
+        activeKeys.forEach(k => {
+          if (result[k]) {
+            promptToSend += `\nFile: ${FILE_LABELS[k]}\n\`\`\`lua\n${result[k]}\n\`\`\`\n`;
+          }
+        });
+      }
+    }
+
+    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: prompt || "Analyze these files" };
+    const newMessages = [...messages, userMsg];
+    
+    setMessages(newMessages);
+    setPrompt("");
+    setLoading(true);
+    setError(null);
+    
+    saveChatToHistory(newMessages, framework, language);
+
+    try {
+      let customInstructions = "";
+      try {
+        const skillsRaw = localStorage.getItem("script-factory-skills");
+        if (skillsRaw) {
+          const skillsList = JSON.parse(skillsRaw);
+          if (Array.isArray(skillsList)) {
+            customInstructions = skillsList.map(s => `--- Skill: ${s.name} ---\n${s.description}\n${s.content}\n`).join("\n");
+          }
+        } else {
+          customInstructions = localStorage.getItem("customInstructions") ?? "";
+        }
+      } catch (e) {
+        console.error("Failed to parse skills", e);
+      }
+      
+      const apiMessages = [...newMessages.slice(0, -1), { role: "user", content: promptToSend }];
+      const formattedApiMessages = apiMessages.map(m => ({
+        role: m.role,
+        content: m.role === "user" ? m.content : JSON.stringify(m.result)
+      }));
+
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: formattedApiMessages, framework, language, customInstructions }),
+      });
+      
+      if (!res.ok) throw new Error("Generation failed. Try rephrasing the request.");
+      
+      const data: GeneratedFiles = await res.json();
+      setResult(data);
+      
+      const modelMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "model",
+        content: data.explanation || "Analyzed successfully.",
+        result: data,
+      };
+      
+      const updatedMessages = [...newMessages, modelMsg];
+      setMessages(updatedMessages);
+
+      if (data.supported !== false) {
+        saveChatToHistory(updatedMessages, framework, language);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handleCopy = (key: string, content: string) => {
     navigator.clipboard.writeText(content);
@@ -181,7 +356,7 @@ export function GeneratorPanel() {
       }
     });
 
-    const fxmanifest = `-- Generated by Script Factory\nfx_version 'cerulean'\ngame 'gta5'\n\n${result.client_lua ? "client_script 'client.lua'\\n" : ""}${result.server_lua ? "server_script 'server.lua'\\n" : ""}${result.config_lua ? "shared_script 'config.lua'\\n" : ""}`;
+    const fxmanifest = `-- Generated by Script Factory\nfx_version 'cerulean'\ngame 'gta5'\n\n${result.client_lua ? "client_script 'client.lua'\n" : ""}${result.server_lua ? "server_script 'server.lua'\n" : ""}${result.config_lua ? "shared_script 'config.lua'\n" : ""}`;
     zip.file("fxmanifest.lua", fxmanifest);
 
     const blob = await zip.generateAsync({ type: "blob" });
@@ -224,18 +399,48 @@ export function GeneratorPanel() {
               </SelectContent>
             </Select>
           </div>
-          <Badge variant="outline" className="font-mono text-xs hidden sm:inline-flex">
-            /chat
-          </Badge>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenFolder}
+              className="h-8 gap-1.5 font-mono text-xs bg-surface"
+            >
+              <FolderOpen className="h-3.5 w-3.5 text-accent" />
+              {dirHandle ? "Folder Linked" : "Open Folder"}
+            </Button>
+            <Badge variant="outline" className="font-mono text-xs hidden sm:inline-flex">
+              /workspace
+            </Badge>
+          </div>
         </div>
+        
+        {localFiles.length > 0 && (
+          <div className="bg-surface-2/50 border-b border-border px-4 py-2 flex items-center gap-2 overflow-x-auto shrink-0">
+            <span className="text-[11px] font-mono text-muted-foreground shrink-0">Workspace Files:</span>
+            {localFiles.map((f) => (
+              <Button
+                key={f.name}
+                variant="ghost"
+                size="sm"
+                onClick={() => handleReadLocalFile(f.handle)}
+                className="h-6 px-2 text-xs font-mono gap-1 shrink-0 bg-surface border border-border/50 hover:bg-surface-2"
+              >
+                <FileCode className="h-3 w-3 text-muted-foreground" />
+                {f.name}
+              </Button>
+            ))}
+          </div>
+        )}
         
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px]">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground opacity-70">
               <Sparkles className="h-8 w-8 mb-3" />
-              <p className="text-sm">Start a conversation to build your script.</p>
-              <p className="text-xs mt-1">You can upload existing code for debugging too.</p>
+              <p className="text-sm">Start a conversation to build or analyze your script.</p>
+              <p className="text-xs mt-1">Open a folder and all files will be automatically attached for the AI.</p>
             </div>
           ) : (
             messages.map((msg) => (
@@ -272,7 +477,7 @@ export function GeneratorPanel() {
             <div className="flex justify-start">
               <div className="bg-surface-2 text-muted-foreground rounded-lg p-3 rounded-tl-sm border border-border text-sm flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Thinking...
+                Reading files & analyzing code...
               </div>
             </div>
           )}
@@ -282,6 +487,26 @@ export function GeneratorPanel() {
         {/* Input area */}
         <div className="p-4 border-t border-border shrink-0 bg-surface">
           {error && <p className="text-xs text-destructive mb-2 px-1">{error}</p>}
+          
+          {/* عرض الملفات المرفقة بشكل بارز وواضح */}
+          {attachedFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 bg-surface-2/80 p-2 rounded-md border border-border">
+              <span className="text-xs font-mono text-muted-foreground w-full">Attached for AI review (Full Content Sent):</span>
+              {attachedFiles.map((file) => (
+                <div key={file.name} className="flex items-center gap-1.5 bg-surface px-2.5 py-1 rounded border border-border text-xs font-mono">
+                  <FileCode className="h-3.5 w-3.5 text-accent" />
+                  <span className="max-w-[150px] truncate">{file.name}</span>
+                  <button 
+                    onClick={() => removeAttachedFile(file.name)}
+                    className="text-muted-foreground hover:text-destructive ml-1"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="relative flex items-end gap-2">
             <input 
               type="file" 
@@ -309,14 +534,14 @@ export function GeneratorPanel() {
                   handleSend();
                 }
               }}
-              placeholder="Message Script Factory..."
+              placeholder="Ask about the attached script or request modifications..."
               className="min-h-[42px] max-h-[160px] resize-none py-2 px-3 text-sm"
               dir={language === "ar" ? "rtl" : "ltr"}
             />
             
             <Button
               onClick={handleSend}
-              disabled={loading || !prompt.trim()}
+              disabled={loading || (!prompt.trim() && attachedFiles.length === 0)}
               className="h-[42px] px-4 shrink-0 rounded-lg"
             >
               <Send className="h-4 w-4" />
@@ -352,25 +577,47 @@ export function GeneratorPanel() {
                   </TabsTrigger>
                 ))}
               </TabsList>
-              <Button onClick={handleDownloadZip} variant="ghost" size="sm" className="gap-1.5 font-mono text-xs shrink-0 ml-2">
-                <Download className="h-3.5 w-3.5" />
-                Download .zip
-              </Button>
+              <div className="flex items-center gap-2 ml-2">
+                <Button 
+                  onClick={() => handleSaveToLocalDisk(fileKeys[0] as any)} 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1.5 font-mono text-xs shrink-0 bg-accent text-accent-foreground hover:bg-accent/90 border-transparent"
+                >
+                  {savingFileKey === fileKeys[0] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Save to Disk
+                </Button>
+                <Button onClick={handleDownloadZip} variant="ghost" size="sm" className="gap-1.5 font-mono text-xs shrink-0">
+                  <Download className="h-3.5 w-3.5" />
+                  .zip
+                </Button>
+              </div>
             </div>
             
             {fileKeys.map((key) => (
               <TabsContent key={key} value={key} className="mt-0 flex-1 relative h-full overflow-hidden">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  className="absolute right-4 top-4 z-10 h-7 gap-1.5 px-2 text-xs opacity-70 hover:opacity-100 transition-opacity bg-surface/80 backdrop-blur-sm"
-                  onClick={() => handleCopy(key, result[key]!)}
-                >
-                  {copiedKey === key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {copiedKey === key ? "Copied" : "Copy"}
-                </Button>
+                <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="h-7 gap-1 px-2 text-xs opacity-80 hover:opacity-100 transition-opacity bg-surface/80 backdrop-blur-sm border-border"
+                    onClick={() => handleSaveToLocalDisk(key as any)}
+                  >
+                    <Save className="h-3 w-3" />
+                    Save Local
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="h-7 gap-1 px-2 text-xs opacity-80 hover:opacity-100 transition-opacity bg-surface/80 backdrop-blur-sm border-border"
+                    onClick={() => handleCopy(key, result[key]!)}
+                  >
+                    {copiedKey === key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copiedKey === key ? "Copied" : "Copy"}
+                  </Button>
+                </div>
                 <div className="h-full overflow-auto">
-                  <pre className="px-5 py-4 pt-14 lg:pt-4 lg:pr-24 font-mono text-[13px] leading-relaxed text-foreground/90 w-full min-w-max">
+                  <pre className="px-5 py-4 pt-14 lg:pt-4 lg:pr-36 font-mono text-[13px] leading-relaxed text-foreground/90 w-full min-w-max">
                     {result[key]}
                   </pre>
                 </div>

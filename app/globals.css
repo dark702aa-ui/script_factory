@@ -30,27 +30,157 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
-/* تخصيص السكرول بار ليناسب الثيم الداكن */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb { background: var(--color-surface-2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--color-surface-2) var(--color-background); }
+
+/* ============================================================
+   AI Liquid Glowing Orb (مشتركة للهيدر والأسفل)
+   ============================================================ */
+
+@keyframes ai-orb-morph {
+  0%, 100% {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    transform: scale(1) rotate(0deg);
+    box-shadow: 0 0 35px rgba(247, 182, 85, 0.4), inset 0 0 25px rgba(255, 143, 68, 0.7);
+  }
+  50% {
+    border-radius: 40% 60% 70% 30% / 40% 70% 30% 60%;
+    transform: scale(1.2) rotate(3deg);
+    box-shadow: 0 0 55px rgba(219, 39, 119, 0.6), inset 0 0 35px rgba(255, 17, 0, 0.658);
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: var(--color-background);
+.ai-liquid-orb,
+.sf-ai-orb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 38% 38%, #ee6322d5 0%, #f77555a6 55%, #db2777 100%);
+  animation: ai-orb-morph 3s ease-in-out infinite;
+  will-change: border-radius, transform, box-shadow;
+  border-radius: 75%;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-surface-2);
-  border-radius: 4px;
+/* ============================================================
+   UPGRADED: AI Neural Orb / Liquid Gradient Swirl
+   ============================================================ */
+
+@keyframes sf-aurora-complex {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  33% { transform: translate(10%, -10%) scale(1.2) rotate(10deg); border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+  66% { transform: translate(-10%, 10%) scale(0.9) rotate(-10deg); border-radius: 70% 30% 50% 50% / 30% 40% 70% 70%; }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-accent);
+@keyframes sf-glow-breath {
+  0%, 100% { opacity: 0.4; filter: blur(90px) brightness(1); }
+  50% { opacity: 0.7; filter: blur(110px) brightness(1.3); }
 }
 
-/* لإخفاء السكرول الأبيض في Firefox و IE */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-surface-2) var(--color-background);
+/* Upgraded Blob Style */
+.sf-glow-blob {
+  position: absolute;
+  width: 35rem;
+  height: 35rem;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.4;
+  animation: sf-aurora-complex 25s ease-in-out infinite, sf-glow-breath 8s ease-in-out infinite;
+  will-change: transform, opacity, border-radius;
+  mix-blend-mode: screen;
+}
+
+.sf-glow-blob--accent { background: radial-gradient(circle, var(--color-accent), transparent 70%); }
+.sf-glow-blob--code { background: radial-gradient(circle, var(--color-code), transparent 70%); }
+.sf-glow-blob--blue { background: radial-gradient(circle, hsl(260 80% 50%), transparent 70%); }
+
+/* Grid and others */
+.sf-mesh-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 55%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 0%, black 35%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 55% at 50% 0%, black 35%, transparent 90%);
+}
+
+@keyframes sf-aurora {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(5%, -6%) scale(1.08); }
+  66% { transform: translate(-4%, 5%) scale(0.95); }
+}
+
+@keyframes sf-glow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.65; }
+}
+
+@keyframes sf-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes sf-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes sf-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sf-fade-in-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sf-flash-success {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-code) 55%, transparent); }
+  100% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-code) 0%, transparent); }
+}
+
+.animate-fade-in-up {
+  animation: sf-fade-in-up 0.5s ease-out both;
+}
+
+.animate-float {
+  animation: sf-float 5s ease-in-out infinite;
+}
+
+.animate-flash-success {
+  animation: sf-flash-success 0.9s ease-out;
+}
+
+.sf-neon-border {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent),
+    0 0 40px -8px color-mix(in srgb, var(--color-accent) 65%, transparent);
+}
+
+.sf-text-gradient {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-code), var(--color-accent));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sf-shimmer 6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-glow-blob,
+  .animate-float,
+  .sf-text-gradient,
+  .ai-liquid-orb,
+  .sf-ai-orb,
+  .animate-fade-in-up {
+    animation: none !important;
+  }
 }

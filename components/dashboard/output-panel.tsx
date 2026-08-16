@@ -26,10 +26,21 @@ export function OutputPanel({
 
   if (!result) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center text-muted-foreground">
         <Terminal className="mb-2 h-8 w-8 opacity-50" />
         <p className="font-mono text-sm">Workspace empty</p>
         <p className="text-sm">Generated code will appear here.</p>
+        <div className="mt-6 max-w-xs space-y-2 rounded-lg border border-dashed border-border/60 p-4 text-xs">
+          <p className="font-medium text-foreground/80">Tip</p>
+          <p>
+            Pick a framework on the left, describe a feature (or tap a
+            starter prompt), and the generated{" "}
+            <code className="font-mono text-[11px]">client.lua</code>,{" "}
+            <code className="font-mono text-[11px]">server.lua</code>, and{" "}
+            <code className="font-mono text-[11px]">config.lua</code> files
+            will show up here with copy/save/download actions.
+          </p>
+        </div>
       </div>
     );
   }

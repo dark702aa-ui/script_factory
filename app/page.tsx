@@ -1,109 +1,128 @@
-import Link from "next/link";
-import { SiteNav } from "@/components/site/site-nav";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EditorWindow } from "@/components/site/editor-window";
-import { Code, Shield, Zap, Sparkles, ArrowRight } from "lucide-react";
+"use client";
 
-const HERO_FILES = [
-  {
-    name: "request",
-    content: "// The developer's request:\n\"I need a complete bank robbery script. \\nIt should require a drill item to start, \\ntake 5 minutes to drill, alert the police at 40% completion, \\nand give money bags upon success. Make it for QBCore.\"",
-    language: "typescript",
-  },
-  {
-    name: "server.lua",
-    content: "local QBCore = exports['qb-core']:GetCoreObject()\n\nQBCore.Functions.CreateCallback('bankrobbery:server:HasDrill', function(source, cb)\n    local Player = QBCore.Functions.GetPlayer(source)\n    if Player then\n        local item = Player.Functions.GetItemByName(Config.DrillItem)\n        cb(item ~= nil)\n    else\n        cb(false)\n    end\nend)",
-    language: "lua",
-  },
-];
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { SiteNav } from "@/components/site/site-nav";
+import { MeshBackground } from "@/components/effects/mesh-background";
+import { OnboardingTour } from "@/components/onboarding/onboarding-tour";
+import { GeneratorPanel } from "@/components/dashboard/generator-panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ArrowDown, Code, LayoutDashboard, Shield, Sparkles, Zap } from "lucide-react";
 
 export default function LandingPage() {
+  const searchParams = useSearchParams();
+  const chatId = searchParams.get("chat") || "landing";
+
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans selection:bg-accent/20">
+      <OnboardingTour />
       <SiteNav />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-32 pb-20 lg:pt-48 lg:pb-32">
-        <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-background pointer-events-none" />
-        
-        <div className="mx-auto max-w-7xl px-6 relative z-10">
-          <div className="flex flex-col items-center text-center space-y-8 max-w-3xl mx-auto">
-            <Badge variant="secondary" className="px-3 py-1 rounded-full bg-accent/10 text-accent border-accent/20 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium tracking-wide uppercase">Powered by Llama 3.3 70B on Groq</span>
+      <section className="relative overflow-hidden pt-24 pb-16 lg:pt-32 lg:pb-20">
+        <MeshBackground />
+
+        <div className="relative z-10 mx-auto max-w-7xl px-6">
+          <div className="mx-auto flex max-w-3xl flex-col items-center space-y-8 text-center">
+            <Badge
+              variant="secondary"
+              className="flex items-center gap-2 rounded-full border-accent/20 bg-accent/10 px-3 py-1 text-accent"
+            >
+              <Sparkles className="h-3.5 w-3.5 animate-float" />
+              <span className="text-xs font-medium uppercase tracking-wide">Powered by Llama 3.3 70B on Groq</span>
             </Badge>
-            
-            <h1 className="text-5xl md:text-7xl font-semibold tracking-tight text-foreground">
-              Code faster.<br className="hidden md:block" />
-              <span className="text-muted-foreground">Build better servers.</span>
+
+            <h1 className="text-5xl font-semibold tracking-tight text-foreground md:text-7xl">
+              Code faster.
+              <br className="hidden md:block" />
+              <span className="sf-text-gradient">Build better servers.</span>
             </h1>
-            
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
-              Transform plain natural language into production-ready Lua scripts for FiveM. Fully typed, AST-sanitized, and optimized for ESX and QBCore.
+
+            <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+              Transform plain natural language into production-ready Lua scripts for FiveM. Fully typed,
+              AST-sanitized, and optimized for ESX and QBCore.
             </p>
-            
-            <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
-              <Button asChild size="lg" className="h-12 px-8 text-base rounded-full shadow-lg hover:shadow-accent/20 transition-all">
+
+            <div className="flex flex-col items-center gap-4 pt-4 sm:flex-row">
+              <Button asChild size="lg" className="h-12 rounded-full px-8 text-base shadow-lg transition-all hover:shadow-accent/20">
+                <a href="#make">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Start Building — it&apos;s free
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="h-12 rounded-full border-border/50 px-8 text-base hover:bg-surface-2">
                 <Link href="/dashboard">
-                  Open Workspace
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  Open Dashboard
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-12 px-8 text-base rounded-full border-border/50 hover:bg-surface-2">
-                <Link href="/dashboard/prompt-generator">Try Prompt Generator</Link>
-              </Button>
             </div>
-          </div>
 
-          {/* Interactive Preview Window */}
-          <div className="mt-20 lg:mt-32 w-full max-w-5xl mx-auto rounded-xl border border-border/50 shadow-2xl bg-surface/50 backdrop-blur-sm overflow-hidden">
-             <div className="flex items-center gap-2 border-b border-border/50 bg-surface px-4 py-3">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-rose-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                </div>
-                <div className="ml-4 flex items-center bg-surface-2 rounded-md px-3 py-1 border border-border/50 text-xs font-mono text-muted-foreground">
-                  script_factory — workspace
-                </div>
-             </div>
-             <div className="p-4 bg-background/50">
-               <EditorWindow files={HERO_FILES} activeFile={0} />
-             </div>
+            <a
+              href="#make"
+              className="flex animate-float items-center gap-1.5 pt-6 font-mono text-xs text-muted-foreground hover:text-foreground"
+            >
+              Try it right now, no sign-up
+              <ArrowDown className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
       </section>
 
-      {/* Feature Grid */}
-      <section className="py-24 bg-surface/30 border-y border-border/30">
+      {/* Live AI Maker */}
+      <section id="make" className="relative scroll-mt-20 py-16 lg:py-24">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="space-y-4 p-6 rounded-2xl bg-background border border-border/50 transition-colors hover:border-accent/40">
-              <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
-                <Code className="w-6 h-6" />
+          <div className="mx-auto mb-10 max-w-2xl text-center flex flex-col items-center">
+            <div className="ai-liquid-orb h-20 w-20 mb-5 rounded-full flex items-center justify-center text-white shadow-2xl">
+              <Sparkles className="h-8 w-8 drop-shadow-md" />
+            </div>
+            
+            <h2 className="font-display text-3xl font-semibold text-foreground">AI Make</h2>
+            <p className="mt-2 text-muted-foreground">
+              This is the real generator — describe a feature, pick ESX or QBCore, and get working code.
+              Everything here runs live and saves to your device.
+            </p>
+          </div>
+
+          <div className="sf-neon-border relative mx-auto h-[70vh] max-h-[720px] min-h-[520px] max-w-6xl overflow-hidden rounded-2xl border border-border/60 bg-surface/60 p-3 backdrop-blur-sm md:p-4">
+            <GeneratorPanel key={chatId} chatId={chatId} />
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Grid (بدون فواصل حادة) */}
+      <section id="features" className="relative bg-surface/30 py-24">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="grid gap-8 md:grid-cols-3">
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-background p-6 transition-colors hover:border-accent/40 hover:shadow-lg hover:shadow-accent/5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
+                <Code className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold">Semantic Generation</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Powered by Llama 3.3 70B, running on Groq's inference infrastructure for fast responses. Trained heavily on Lua 5.4 and FiveM natives — it understands game logic, not just syntax.
+              <p className="leading-relaxed text-muted-foreground">
+                Powered by Llama 3.3 70B, running on Groq&apos;s inference infrastructure for fast responses.
+                Trained heavily on Lua 5.4 and FiveM natives — it understands game logic, not just syntax.
               </p>
             </div>
-            <div className="space-y-4 p-6 rounded-2xl bg-background border border-border/50 transition-colors hover:border-accent/40">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                <Shield className="w-6 h-6" />
+            <div id="security" className="scroll-mt-20 space-y-4 rounded-2xl border border-border/50 bg-background p-6 transition-colors hover:border-accent/40 hover:shadow-lg hover:shadow-emerald-500/5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                <Shield className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold">AST Sanitization</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Before output reaches you, the code is parsed into a real Lua AST to statically detect dynamic code injection or unsafe natives.
+              <p className="leading-relaxed text-muted-foreground">
+                Before output reaches you, the code is parsed into a real Lua AST to statically detect dynamic
+                code injection or unsafe natives.
               </p>
             </div>
-            <div className="space-y-4 p-6 rounded-2xl bg-background border border-border/50 transition-colors hover:border-accent/40">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-                <Zap className="w-6 h-6" />
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-background p-6 transition-colors hover:border-accent/40 hover:shadow-lg hover:shadow-amber-500/5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+                <Zap className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold">Iterative Refinement</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Don&apos;t settle for the first draft. Use the workspace chat to modify features, upload your own files for context, and debug instantly.
+              <p className="leading-relaxed text-muted-foreground">
+                Don&apos;t settle for the first draft. Use the chat to modify features, upload your own files for
+                context, and debug instantly.
               </p>
             </div>
           </div>

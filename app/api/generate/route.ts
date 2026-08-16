@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BASE_SYSTEM_PROMPT } from "@/lib/prompts";
 import { sanitizeLuaScript, SanitizerFinding } from "@/lib/sanitizer/luaSanitizer";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { Groq } from "groq-sdk";
 
 export const runtime = "nodejs";
@@ -66,6 +67,10 @@ async function executeWithGroqKeyRotation<T>(fn: (groq: Groq) => Promise<T>): Pr
   throw new Error("All Groq API keys have reached their rate limits.");
 }
 
+// TODO(auth): there is no real authentication yet — every visitor is treated
+// as the same "demo-user". Before a public launch, replace this with a real
+// session (e.g. NextAuth.js) so quota/history are tied to an actual account
+// instead of the shared IP-based rate limit below.
 async function getSession(req: NextRequest): Promise<{ userId: string } | null> {
   return { userId: "demo-user" };
 }
@@ -95,6 +100,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // No real auth exists yet (see TODO above), so throttle by IP to stop a
+  // single visitor/bot from draining the shared Groq API quota.
+  const ip = getClientIp(req);
+  const rateLimit = checkRateLimit(`generate:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: `Too many requests. Please wait ${rateLimit.retryAfterSeconds}s and try again.` },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const { messages, framework, language, customInstructions } = body ?? {};
 
@@ -105,6 +121,17 @@ export async function POST(req: NextRequest) {
     !["en", "ar"].includes(language)
   ) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  // Guard against pathological payloads (huge attachments, giant chat
+  // history) inflating token cost per request.
+  const MAX_MESSAGE_CHARS = 40_000;
+  const totalChars = messages.reduce((sum: number, m: any) => sum + String(m?.content ?? "").length, 0);
+  if (totalChars > MAX_MESSAGE_CHARS) {
+    return NextResponse.json(
+      { error: "Conversation/context is too large. Remove some attached files or start a new chat." },
+      { status: 413 }
+    );
   }
 
   const quota = await checkAndConsumeQuota(session.userId);
